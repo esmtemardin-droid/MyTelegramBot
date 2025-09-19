@@ -1,83 +1,40 @@
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import Application, CommandHandler, CallbackQueryHandler, ContextTypes
-import random, requests
+# bot.py
+import os
+import asyncio
+from aiohttp import web
+from telegram import Update
+from telegram.ext import ApplicationBuilder, CommandHandler
 
-# لیست جوک‌ها
-jokes = [
-    "می‌دونی چرا کتاب ریاضی همیشه غمگینه؟ چون پر از مسئله‌ست! 📚😂",
-    "یه مورچه میره کافی‌شاپ، میگن چی می‌خوری؟ میگه یه دونه شکر لطفاً 🐜☕",
-    "می‌دونی چرا کامپیوتر همیشه خسته‌س؟ چون همیشه بایت بایت کار می‌کنه 💻😅"
-]
+# ======= تنظیمات =======
+TOKEN = "8473648131:AAGnEuohCll0ge3IZ2jNyWVZwVU8rUpop7E"  # ← اینجا توکن رباتت رو بذار
+PORT = int(os.environ.get("PORT", 5000))  # Render به طور خودکار پورت می‌ده
 
-# لیست جملات انگیزشی
-quotes = [
-    "هیچوقت برای شروع دیر نیست 💪",
-    "موفقیت از دل تلاش‌های کوچیک ساخته میشه 🚀",
-    "وقتی همه میگن نمیشه، یعنی وقتشه که تو ثابت کنی میشه ✨"
-]
+# ======= فرمان /start =======
+async def start(update: Update, context):
+    await update.message.reply_text("ربات من آنلاین است 😎")
 
-# API عکس گربه
-def get_cat_photo():
-    url = "https://api.thecatapi.com/v1/images/search"
-    r = requests.get(url).json()
-    return r[0]["url"]
+# ======= ساخت ربات =======
+app = ApplicationBuilder().token(TOKEN).build()
+app.add_handler(CommandHandler("start", start))
 
-# آب‌وهوا
-def get_weather(city="Tehran"):
-    API_KEY = "8fd93f050ee4bd20ea08b71ff6abb994"  # باید API Key رایگان از openweathermap.org بگیری
-    url = f"http://api.openweathermap.org/data/2.5/weather?q={city}&appid={API_KEY}&units=metric&lang=fa"
-    data = requests.get(url).json()
-    if data.get("main"):
-        temp = data["main"]["temp"]
-        desc = data["weather"][0]["description"]
-        return f"🌤 وضعیت هوا در {city}:\n{desc}, دما: {temp}°C"
-    return "❌ نتونستم وضعیت هوا رو بیارم!"
+# ======= Web Server ساده برای Render =======
+async def handle(request):
+    return web.Response(text="Bot is running!")
 
-# شروع
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    keyboard = [
-        [InlineKeyboardButton("😂 جوک", callback_data="joke"),
-         InlineKeyboardButton("✨ انگیزشی", callback_data="quote")],
-        [InlineKeyboardButton("🐱 عکس گربه", callback_data="cat"),
-         InlineKeyboardButton("🎶 موزیک", callback_data="music")],
-        [InlineKeyboardButton("🎲 بازی تاس", callback_data="dice"),
-         InlineKeyboardButton("✂️ سنگ-کاغذ-قیچی", callback_data="rps")],
-        [InlineKeyboardButton("🌤 وضعیت هوا", callback_data="weather")]
-    ]
-    reply_markup = InlineKeyboardMarkup(keyboard)
-    await update.message.reply_text("سلام! 👋 انتخاب کن:", reply_markup=reply_markup)
+web_app = web.Application()
+web_app.add_routes([web.get('/', handle)])
 
-# هندلر دکمه‌ها
-async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer()
+async def start_webserver():
+    runner = web.AppRunner(web_app)
+    await runner.setup()
+    site = web.TCPSite(runner, "0.0.0.0", PORT)
+    await site.start()
+    print(f"Web server running on port {PORT}")
 
-    if query.data == "joke":
-        await query.message.reply_text(random.choice(jokes))
-    elif query.data == "quote":
-        await query.message.reply_text(random.choice(quotes))
-    elif query.data == "cat":
-        await query.message.reply_photo(get_cat_photo())
-    elif query.data == "music":
-        await query.message.reply_audio("https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3")
-    elif query.data == "dice":
-        dice = random.randint(1, 6)
-        await query.message.reply_text(f"🎲 عدد تاس: {dice}")
-    elif query.data == "rps":
-        choice = random.choice(["✊ سنگ", "✋ کاغذ", "✌ قیچی"])
-        await query.message.reply_text(f"انتخاب من: {choice}")
-    elif query.data == "weather":
-        await query.message.reply_text(get_weather("Tehran"))
-
-def main():
-    TOKEN = "8473648131:AAGnEuohCll0ge3IZ2jNyWVZwVU8rUpop7E"  # توکن ربات خودت
-
-    app = Application.builder().token(TOKEN).build()
-
-    app.add_handler(CommandHandler("start", start))
-    app.add_handler(CallbackQueryHandler(button))
-
-    app.run_polling()
+# ======= اجرای همزمان ربات و Web Server =======
+async def main():
+    await start_webserver()
+    await app.run_polling()
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())
